@@ -73,11 +73,15 @@ function unwrapStyling() {
   const INLINE = new Set(['b', 'strong', 'i', 'em', 'u', 'a'])
   const BLOCK = new Set(['p', 'div', 'ul', 'ol', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'table'])
   const isBlock = (node) => node.type === 'element' && BLOCK.has(node.tagName)
+  // Text pasted from Google Docs arrives inside one element it marks with its own id
+  // (`<b id="docs-internal-guid-…">`, a `<b>` the paste styles as NOT bold): a wrapper, never
+  // emphasis, whatever its tag.
+  const isPasteWrapper = (node) => String(node.properties?.id ?? '').startsWith('docs-internal-guid-')
   const fix = (parent) => {
     parent.children = (parent.children ?? []).flatMap((node) => {
       if (node.children) fix(node)
       if (node.type !== 'element') return [node]
-      if (STYLING.has(node.tagName)) return node.children
+      if (STYLING.has(node.tagName) || isPasteWrapper(node)) return node.children
       // Bold or a link wrapped round whole paragraphs (`<b><p>…</p><p>…</p></b>`) is the same
       // fault: put it inside each paragraph instead, so each stays a paragraph.
       if (INLINE.has(node.tagName) && node.children.some(isBlock)) {
@@ -94,11 +98,45 @@ function unwrapStyling() {
   return (tree) => fix(tree)
 }
 
+/**
+ * What an editor left behind that shows a reader nothing: a line break at the start or end of
+ * a paragraph (or standing alone between two, as `<p><br></p>` and a bare `<br>` do), a link or
+ * emphasis round no words and no picture, a heading or paragraph left with nothing in it.
+ * Written to Markdown these come out as marks a reader meets as text (`**\ **`, a lone `\`).
+ * None of them is a word, so nothing a reader is told is lost.
+ */
+function dropEmpty() {
+  // What holds a line of prose; a list's item among them (`<li><br></li>` is an item of nothing).
+  const PHRASING = new Set(['paragraph', 'heading', 'emphasis', 'strong', 'link', 'listItem'])
+  const shows = (node) =>
+    node.type === 'image' ||
+    node.type === 'inlineCode' ||
+    (node.type === 'text' && node.value.trim() !== '') ||
+    (node.children ?? []).some(shows)
+  const fix = (parent) => {
+    parent.children = (parent.children ?? []).flatMap((node) => {
+      if (node.children) fix(node)
+      if (!PHRASING.has(node.type)) return [node]
+      // A break at either end, and any spaces between it and the end.
+      const space = (child) => child?.type === 'text' && child.value.trim() === ''
+      const breakAt = (end) => {
+        const [outer, inner] = end === 'start' ? node.children : node.children.slice(-2).reverse()
+        return outer?.type === 'break' ? 1 : space(outer) && inner?.type === 'break' ? 2 : 0
+      }
+      for (let n = breakAt('start'); n > 0; n = breakAt('start')) node.children.splice(0, n)
+      for (let n = breakAt('end'); n > 0; n = breakAt('end')) node.children.splice(-n, n)
+      return shows(node) ? [node] : []
+    })
+  }
+  return (tree) => fix(tree)
+}
+
 const toMarkdown = unified()
   .use(rehypeParse, { fragment: true })
   .use(unwrapStyling)
   .use(rehypeRemark)
   .use(spacesOutOfEmphasis)
+  .use(dropEmpty)
   // Asterisks for emphasis: unlike underscores they may sit inside a word ("un*believ*able").
   .use(remarkStringify, { bullet: '-', emphasis: '*', listItemIndent: 'one', rule: '-' })
 
