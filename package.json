@@ -1,0 +1,37 @@
+{
+	"name": "@aicolab/learning-contracts",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "What a lesson is, as data: the Zod schemas for lesson files and their components, the one parser that reads a lesson file into them, and the converter that writes lesson files from an Articulate Rise course.",
+	"engines": {
+		"node": ">=22"
+	},
+	"exports": {
+		".": "./src/index.ts",
+		"./lesson": "./src/lesson.ts",
+		"./components": "./src/components.ts",
+		"./parse": "./src/parse.ts",
+		"./content": "./src/content.ts",
+		"./convert/rise": "./convert/rise.mjs"
+	},
+	"scripts": {
+		"check-types": "tsc --noEmit",
+		"check-content": "node scripts/check-content.ts"
+	},
+	"dependencies": {
+		"rehype-parse": "^9.0.1",
+		"rehype-remark": "^10.0.1",
+		"remark-stringify": "^11.0.0",
+		"remark-gfm": "^4.0.1",
+		"remark-mdc": "^3.11.1",
+		"remark-parse": "^11.0.0",
+		"unified": "^11.0.5",
+		"zod": "^4.6.5"
+	},
+	"devDependencies": {
+		"@types/mdast": "^4.0.4",
+		"@types/node": "^24.0.0",
+		"typescript": "~7.0.2"
+	}
+}
